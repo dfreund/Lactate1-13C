@@ -1,0 +1,548 @@
+## load packages, need to be installed first (but only once)
+## to install isotopelabeling
+## > install.packages("isotopelabeling", repos="http://www.stat.umn.edu/~rend0020/repos")
+## for xcms see
+## http://bioconductor.org/packages/devel/bioc/html/xcms.html
+## Install latticeExtra Package
+library(isotopelabeling)
+library(xcms)
+
+### functions to read in data and set up, and process output
+readEIC <- function(file, mz, mz.tol, rt) {
+    robj <- xcmsRaw(file)
+    eic <- lapply(mz, function(x) { rawEIC(robj, mzrange=x+c(-1,1)*mz.tol, rtrange=rt) })
+    dat <- do.call(rbind, lapply(seq_along(eic), function(idx) {
+        out <- data.frame(eic[[idx]])
+        out$channel <- idx
+        out
+    }))       
+    dat$name <- factor(names(mz)[dat$channel], levels=names(mz))
+    structure(dat, class=c("EIC", class(dat)))
+}
+plot.EIC <- function(x) {
+    xyplot(intensity ~ scan | name, data=x, type="l", as.table=TRUE)
+}
+
+getProp <- function(out, mz, standard.factor) {
+    prop <- out$data
+    ret <- cbind(Name=factor(names(mz)[prop$Channel], levels=names(mz)), prop)
+    if(!missing(standard.factor)) {
+        ret <- cbind(ret, Ab=ret$RelAb*standard.factor)
+    }
+    ret
+}
+dofile <- function(file, mz, mz.tol, rt, standard.factor) {
+    eic <- readEIC(file, mz, mz.tol, rt)
+    relAb <- relAbFromCounts(eic$intensity, eic$channel, eic$scan, norm_channel=1)
+    prop <- getProp(relAb, mz, standard.factor)
+    list(eic=eic, relAb=relAb, prop=prop)
+}
+getAb <- function(out) {
+    cbind(out[[1]]$prop[,c(1,2)], do.call(cbind, lapply(out, function(x) x$prop$Ab)))
+}
+
+
+### here's the file and mz/rt info
+## these are built in R here but they could be
+## built in files outside R and then read in
+
+## files need two columns, file and standard.factor
+files <- data.frame(file=c(MCF72310con1="MCF7-2310con1.mzXML",
+                           MCF72310con2="MCF7-2310con2.mzXML",
+                           MCF72310con3="MCF7-2310con3.mzXML",
+                           MCF71con1="MCF71con1.mzXML",
+                           MCF71con2="MCF71con2.mzXML",
+                           MCF71con3="MCF71con3.mzXML",
+                           MCF73con1="MCF73con1.mzXML",
+                           MCF73con2="MCF73con2.mzXML",
+                           MCF73con3="MCF73con3.mzXML",
+                           MCF71ku1="MCF71ku1.mzXML",
+                           MCF71KU2="MCF71KU2.mzXML",
+                           MCF76con1="MCF76con1.mzXML",
+                           MCF76con2="MCF76con2.mzXML",
+                           MCF76con3="MCF76con3.mzXML",
+                           MCF79con2="MCF79con2.mzXML",
+                           MCF79con3="MCF79con3.mzXML",
+                           MCF79con4="MCF79con4.mzXML",
+                           MDAMB2311con1="MDAMB2311con1.mzXML",
+                           MDAMB2311con2="MDAMB2311con2.mzXML",
+                           MDAMB2311con3="MDAMB2311con3.mzXML",
+                           MDAMB2313con1="MDAMB2313con1.mzXML",
+                           MDAMB2313con2="MDAMB2313con2.mzXML",
+                           MDAMB2313con3="MDAMB2313con3.mzXML",
+                           MDAMB2316con1="MDAMB2316con1.mzXML",
+                           MDAMB2316con2="MDAMB2316con2.mzXML",
+                           MDAMB2316con3="MDAMB2316con3.mzXML",
+                           MCF73KU1="MCF73KU1.mzXML",
+                           MCF73KU2="MCF73KU2.mzXML",
+                           MDAMB2319con1="MDAMB2319con1.mzXML",
+                           MDAMB2319con2="MDAMB2319con2.mzXML",
+                           MDAMB2319con3="MDAMB2319con3.mzXML",
+                           MDAMB4530con1="MDAMB4530con1.mzXML",
+                           MDAMB4530con2="MDAMB4530con2.mzXML",
+                           MDAMB4530con3="MDAMB4530con3.mzXML",
+                           MDAMB4531con1="MDAMB453-1con1.mzXML",
+                           MDAMB4531con2="MDAMB453-1con2.mzXML",
+                           MDAMB4531con3="MDAMB453-1con3.mzXML",
+                           MDAMB4531KU1="MDAMB4531KU1.mzXML",
+                           MDAMB4531KU2="MDAMB4531KU2.mzXML",
+                           MDAMB4531KU3="MDAMB4531KU3.mzXML",
+                           MDAMB4533con1="MDAMB453-3con1.mzXML",
+                           MDAMB4533con2="MDAMB453-3con2.mzXML",
+                           MDAMB4533con3="MDAMB453-3con3.mzXML",
+                           MDAMB4533ku1="MDAMB453-3ku1.mzXML",
+                           MDAMB4533ku2="MDAMB453-3ku2.mzXML",
+                           MDAMB4533ku3="MDAMB453-3ku3.mzXML",
+                           MDAMB4536con1="MDAMB453-6con1.mzXML",
+                           MDAMB4536con2="MDAMB453-6con2.mzXML",
+                           MDAMB4536con3="MDAMB453-6con3.mzXML",
+                           MDAMB4536KU1="MDAMB453-6KU1.mzXML",
+                           MDAMB4536KU2="MDAMB453-6KU2.mzXML",
+                           MDAMB4536KU3="MDAMB453-6KU3.mzXML",
+                           MDAMB4539con1="MDAMB453-9con1.mzXML",
+                           MDAMB4539con2="MDAMB453-9con2.mzXML",
+                           MDAMB4539con3="MDAMB453-9con3.mzXML",
+                           MDAMB4539ku1="MDAMB453-9ku1.mzXML",
+                           MDAMB4539ku2="MDAMB453-9ku2.mzXML",
+                           MDAMB4539ku3="MDAMB453-9ku3.mzXML",
+                           MDAMB4681con1="MDAMB468-1con1.mzXML",
+                           MDAMB4681con2="MDAMB468-1con2.mzXML",
+                           MDAMB4681con3="MDAMB468-1con3.mzXML",
+                           MDAMB4683con1="MDAMB468-3con1.mzXML",
+                           MDAMB4683con2="MDAMB468-3con2.mzXML",
+                           MDAMB4683con3="MDAMB468-3con3.mzXML",
+                           MDAMB4686con1="MDAMB468-6con1.mzXML",
+                           MDAMB4686con2="MDAMB468-6con2.mzXML",
+                           MDAMB4686con3="MDAMB468-6con3.mzXML",
+                           MDAMB4689con1="MDAMB468-9con1.mzXML",
+                           MDAMB4689con2="MDAMB468-9con2.mzXML",
+                           MDAMB4689con3="MDAMB468-9con3.mzXML",
+                           N4680con1="N-468-0con1.mzXML",
+                           N4680conku="N-468-0con-ku.mzXML",
+                           N4680conmet="N-468-0con-met.mzXML",
+                           N4680conku60="N-468-0con-ku60.mzXML",
+                           N4683con1="N-468-3con1.mzXML",
+                           N4683con2="N-468-3con2.mzXML",
+                           N4683con3="N-468-3con3.mzXML",
+                           N4683ku1="N-468-3ku-1.mzXML",
+                           N4683ku2="N-468-3ku-2.mzXML",
+                           N4683ku3="N-468-3ku-3.mzXML",
+                           N4683met1="N-468-3-met1.mzXML",
+                           N4683met2="N-468-3-met2.mzXML",
+                           N4683met3="N-468-3-met3.mzXML",
+                           N4683ku601="N-468-3ku60-1.mzXML",
+                           N4683ku602="N-468-3ku60-2.mzXML",
+                           N4683ku603="N-468-3ku60-3.mzXML",
+                           N4689con1="N-468-9con1.mzXML",
+                           N4689con2="N-468-9con2.mzXML",
+                           N4689con3="N-468-9con3.mzXML",
+                           N4689ku1="N-468-9ku-1.mzXML",
+                           N4689ku2="N-468-9ku-2.mzXML",
+                           N4689ku3="N-468-9ku-3.mzXML",
+                           N4689met1="N-468-9-met1.mzXML",
+                           N4689met2="N-468-9-met2.mzXML",
+                           N4689met3="N-468-9-met3.mzXML",
+                           N4689ku601="N-468-9-ku60-1.mzXML",
+                           N4689ku602="N-468-9-ku60-2.mzXML",
+                           N4689ku603="N-468-9-ku60-3.mzXML",
+                           N2313con1="N-231-3con1.mzXML",
+                           N2313con2="N-231-3con2.mzXML",
+                           N2313con3="N-231-3con3.mzXML",
+                           N2313KU1="N-231-3KU1.mzXML",
+                           N2313KU2="N-231-3KU2.mzXML",
+                           N2313KU3="N-231-3KU3.mzXML",
+                           N2319con1="N-231-9con1.mzXML",
+                           N2319con2="N-231-9con2.mzXML",
+                           N2319con3="N-231-9con3.mzXML",
+                           N2319ku1="N-231-9ku1.mzXML",
+                           N2319ku2="N-231-9ku2.mzXML",
+                           N2319ku3="N-231-9ku3.mzXML",
+                           Gln2310con="Gln-231-0con.mzXML",
+                           Gln2310conku="Gln-231-0con-ku.mzXML",
+                           Gln2313con1="Gln-231-3con1.mzXML",
+                           Gln2313con2="Gln-231-3con2.mzXML",
+                           Gln2313con3="Gln-231-3con3.mzXML",
+                           Gln2313KU1="Gln-231-3KU1.mzXML",
+                           Gln2313KU2="Gln-231-3KU2.mzXML",
+                           Gln2313KU3="Gln-231-3KU3.mzXML",
+                           Gln2319con1="Gln-231-9con1.mzXML",
+                           Gln2319con2="Gln-231-9con2.mzXML",
+                           Gln2319con3="Gln-231-9con3.mzXML",
+                           Gln2319ku1="Gln-231-9ku1.mzXML",
+                           Gln2319ku2="Gln-231-9ku2.mzXML",
+                           Gln2319ku3="Gln-231-9ku3.mzXML",
+                           Gln4533con1="Gln-453-3con1.mzXML",
+                           Gln4533con2="Gln-453-3con2.mzXML",
+                           Gln4533con3="Gln-453-3con3.mzXML",
+                           Gln4533KU1="Gln-453-3KU1.mzXML",
+                           Gln4533KU2="Gln-453-3KU2.mzXML",
+                           Gln4533KU3="Gln-453-3KU3.mzXML",
+                           Gln4539con1="Gln-453-9con1.mzXML",
+                           Gln4539con2="Gln-453-9con2.mzXML",
+                           Gln4539con3="Gln-453-9con3.mzXML",
+                           Gln4539ku1="Gln-453-9ku1.mzXML",
+                           Gln4539ku2="Gln-453-9ku2.mzXML",
+                           Gln4539ku3="Gln-453-9ku3.mzXML",
+                           PC30con="PC-3-0-con.mzXML",
+                           PC30conku="PC-3-0-con-ku.mzXML",
+                           PC31con1="PC3-1con1.mzXML",
+                           PC31con2="PC3-1con2.mzXML",
+                           PC31con3="PC3-1con3.mzXML",
+                           PC31KU1="PC3-1KU1.mzXML",
+                           PC31KU2="PC3-1KU2.mzXML",
+                           PC31KU3="PC3-1KU3.mzXML",
+                           PC33con1="PC3-3con1.mzXML",
+                           PC33con2="PC3-3con2.mzXML",
+                           PC33con3="PC3-3con3.mzXML",
+                           PC33ku1="PC3-3ku1.mzXML",
+                           PC33ku2="PC3-3ku2.mzXML",
+                           PC33ku3="PC3-3ku3.mzXML",
+                           PC36con1="PC3-6con1.mzXML",
+                           PC36con2="PC3-6con2.mzXML",
+                           PC36con3="PC3-6con3.mzXML",
+                           PC36KU1="PC3-6KU1.mzXML",
+                           PC36KU2="PC3-6KU2.mzXML",
+                           PC36KU3="PC3-6KU3.mzXML",
+                           PC39con1="PC3-9con1.mzXML",
+                           PC39con2="PC3-9con2.mzXML",
+                           PC39con3="PC3-9con3.mzXML",
+                           PC39ku1="PC3-9ku1.mzXML",
+                           PC39ku2="PC3-9ku2.mzXML",
+                           PC39ku3="PC3-9ku3.mzXML",
+                           LnCap1con1="LnCap-1-con1.mzXML",
+                           LnCap1con2="LnCap-1-con2.mzXML",
+                           LnCap1con3="LnCap-1-con3.mzXML",
+                           LnCap1KU1="LnCap-1-KU1.mzXML",
+                           LnCap1KU2="LnCap-1-KU2.mzXML",
+                           LnCap1KU3="LnCap-1-KU3.mzXML",
+                           LnCap3con1="LnCap-3-con1.mzXML",
+                           LnCap3con2="LnCap-3-con2.mzXML",
+                           LnCap3con3="LnCap-3-con3.mzXML",
+                           LnCap3ku1="LnCap-3ku1.mzXML",
+                           LnCap3ku2="LnCap-3ku2.mzXML",
+                           LnCap3ku3="LnCap-3ku3.mzXML",
+                           LnCap6con1="LnCap-6con1.mzXML",
+                           LnCap6con2="LnCap-6con2.mzXML",
+                           LnCap6con3="LnCap-6con3.mzXML",
+                           LnCap6KU1="LnCap-6KU1.mzXML",
+                           LnCap6KU2="LnCap-6KU2.mzXML",
+                           LnCap6KU3="LnCap-6KU3.mzXML",
+                           LnCap9con1="LnCap-9con1.mzXML",
+                           LnCap9con2="LnCap-9con2.mzXML",
+                           LnCap9con3="LnCap-9con3.mzXML",
+                           LnCap9ku1="LnCap-9ku1.mzXML",
+                           LnCap9ku2="LnCap-9ku2.mzXML",
+                           LnCap9ku3="LnCap-9ku3.mzXML",
+                           MEFA290gluco="MEFA29-0-gluco.mzXML",
+                           MEFA29ogln="MEFA29-o-gln.mzXML",
+                           MEFA293con1="MEF-A29-3con1.mzXML",
+                           MEFA293con2="MEF-A29-3con2.mzXML",
+                           MEFA293con3="MEF-A29-3con3.mzXML",
+                           GlnA293con1="Gln-A29-3con1.mzXML",
+                           GlnA293con2="Gln-A29-3con2.mzXML",
+                           GlnA293con3="Gln-A29-3con3.mzXML",
+                           MEFA299con1="MEF-A29-9con1.mzXML",
+                           MEFA299con2="MEF-A29-9con2.mzXML",
+                           MEFA299con3="MEF-A29-9con3.mzXML",
+                           GlnA299con1="Gln-A29-9con1.mzXML",
+                           GlnA299con2="Gln-A29-9con2.mzXML",
+                           GlnA299con3="Gln-A29-9con3.mzXML",
+                           MEFA383con1="MEF-A38-3con1.mzXML",
+                           MEFA383con2="MEF-A38-3con2.mzXML",
+                           MEFA383con3="MEF-A38-3con3.mzXML",
+                           GlnA383con1="Gln-A38-3con1.mzXML",
+                           GlnA383con2="Gln-A38-3con2.mzXML",
+                           GlnA383con3="Gln-A38-3con3.mzXML",
+                           MEFA389con1="MEF-A38-9con1.mzXML",
+                           MEFA389con2="MEF-A38-9con2.mzXML",
+                           MEFA389con3="MEF-A38-9con3.mzXML",
+                           GlnA389con1="Gln-A38-9con1.mzXML",
+                           GlnA389con2="Gln-A38-9con2.mzXML",
+                           GlnA389con3="Gln-A38-9con3.mzXML"), stringsAsFactors=FALSE)
+#                     
+files$standard.factor = c(100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100,
+  100)
+
+## isotopic.traces needs two columns, mz and shift.group
+## shift.group is 0 if it should not shift and traces that
+## should shift by the same amount should have the same number
+isotopic.traces <- data.frame(mz=c(
+                                  "M"    = 89.024,
+                                  "M+C"  = 90.028))
+#isotopic.traces$shift.group <- c(rep(0, 1), 1, 1, rep(0, 213))
+
+dir <- "C:\\Users\\Hegeman Lab\\Desktop\\080114"
+
+mz.tol <- .017
+rt <- c(2.44, 2.58)*60
+
+files$path <- file.path(dir, files$file)
+
+## get the data for this file and mz/rt info, standard.factor used to adjust for amounts of ISD
+out <- lapply(seq_len(nrow(files)), function(idx) {
+     mz <- isotopic.traces$mz
+     names(mz) <- rownames(isotopic.traces)
+     dofile(files$path[idx], mz=mz, mz.tol=mz.tol, rt=rt, standard.factor=files$standard.factor[idx])})
+ names(out) <- rownames(files)
+
+### out is a list of lists, with a list for each file containing
+### the EIC data, the relative abundance, and the proportion summary
+### named, eic, relAb, prop
+
+### plot it to make sure it looks right
+### this right now just plots the first one
+
+
+# plot(out[[1]]$eic)
+ 
+
+#plot(out[[1]]$relAb)
+
+
+#print(out[[1]]$eic)
+#print(out[[1:212]]$relAb$Rsq)
+
+#out[[1]]$relAb$coefs
+#out[[2]]$relAb$coefs
+#out[[3]]$relAb$coefs
+
+#out[[1]]$prop
+#out[[2]]$prop
+#out[[3]]$prop
+
+### get the abundance
+abs <- getAb(out)
+### abs
+write.csv(abs, file=file.path(dir, "052814_11114RTmztolLACTATE.csv"), row.names=FALSE)
+
+# i = as.integer(1)
+# while(i < 10) {
+# #  print(i)
+#   plot(out[[i]]$relAb)
+#   print(out[[i]]$relAb$Rsq)
+#   i= as.integer(i + 1)
+#   next
+# }
+
+for(i in (1:212)) {
+  print(i)
+  plot(out[[i]]$relAb)
+  print(out[[i]]$relAb$Rsq)
+  i= i + 1
+  next
+}
+
+plot(out[[43]]$relAb)
+
+
+
